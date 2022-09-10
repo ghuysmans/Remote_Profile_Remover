@@ -1,0 +1,131 @@
+<job>
+<runtime>
+<description>Remote profile removal tool</description>
+<example>cscript Remote_Profile_Remover.wsf /id:[0-9][0-9]$</example>
+<named name="l" helpstring="List only, do not delete (what-if mode)" />
+<named name="u" helpstring="Unattended (no confirmation)" />
+<named name="q" helpstring="Quiet (no output and no confirmation)" />
+<named name="p" helpstring="Prompt for confirmation before deleting each profile" />
+<named name="r" helpstring="Delete local caches of roaming profiles only, not local profiles" />
+<named name="c" helpstring="Delete on remote computer instead of local machine" type="string" />
+<named name="d" helpstring="Delete only profiles not used in x days" type="string" />
+<named name="ntuserini" helpstring="When determining profile age for /d, use the file NTUSER.INI instead of NTUSER.DAT for age calculation" />
+<named name="i" helpstring="Ignore errors, continue deleting" />
+<named name="ed" helpstring="Exclude profile directories whose name matches this pattern. May be used more than once and can be combined with /id" type="string" />
+<named name="id" helpstring="Include only profile directories whose name matches this pattern. May be used more than once and can be combined with /ed" type="string" />
+<named name="regex" helpstring="Enable regex matching (default: glob with ? and *)" />
+</runtime>
+<script language="VBScript">
+Option Explicit
+
+Function CompilePattern(pattern)
+	If rx Then
+		CompilePattern = pattern
+	Else 'glob
+		Dim i
+		CompilePattern = ""
+		For i = 1 To Len(pattern)
+			Dim c
+			c = Mid(pattern, i, 1)
+			Select Case c
+			Case "?"
+				CompilePattern = CompilePattern & "."
+			Case "*"
+				CompilePattern = CompilePattern & ".*"
+			Case "[", "]", "\", "^", "$", "+", ".", "(", ")", "|", "{", "}"
+				CompilePattern = CompilePattern & "\" & c
+			Case Else
+				CompilePattern = CompilePattern & c
+			End Select
+		Next 'i
+	End If
+End Function
+
+Dim list, unattended, quiet, prompt, roaming, computer, days, ini, ignore, rx
+With WScript.Arguments.Named
+	list = .Exists("l")
+	unattended = .Exists("u")
+	quiet = .Exists("q")
+	prompt = .Exists("p")
+	roaming = .Exists("r")
+	computer = .Item("c")
+	If computer = "" Then computer = "."
+	days = CInt(.Item("d"))
+	ini = .Exists("ntuserini")
+	ignore = .Exists("i")
+	rx = .Exists("regex")
+End With
+
+If WScript.Arguments.Unnamed.Count <> 0 Or unattended And prompt Or quiet And prompt Then
+	WScript.Arguments.ShowUsage
+	WScript.Quit 1
+End If
+unattended = unattended Or quiet 'Quiet (no output and no confirmation)
+
+Function Ask(prompt)
+	If unattended Then
+		Ask = True
+	Else
+		WScript.Echo prompt & " (Yes/No) "
+		Dim answer
+		answer = LCase(WScript.StdIn.ReadLine)
+		Ask = answer = "y" Or answer = "yes"
+	End If
+End Function
+
+Function CompilePatterns(arg)
+	Dim prefix
+	prefix = "/" & arg & ":"
+	Dim o
+	Set o = New RegExp
+	Dim a
+	For Each a In WScript.Arguments
+		If Left(a, Len(prefix)) = prefix Then
+			If o.Pattern <> "" Then o.Pattern = o.Pattern & "|"
+			o.Pattern = o.Pattern & CompilePattern(Mid(a, Len(prefix) + 1))
+		End If
+	Next 'a
+	Set CompilePatterns = o
+End Function
+
+Dim excluded, included
+Set excluded = CompilePatterns("ed")
+Set included = CompilePatterns("id")
+
+Sub Report(s)
+	If Not quiet Then WScript.Echo s
+End Sub
+
+Sub Dump(profile)
+	Report "LastUseTime: " & profile.LastUseTime
+	Report "Loaded: " & profile.Loaded
+	Report "LocalPath: " & profile.LocalPath
+	Report "RoamingConfigured: " & profile.RoamingConfigured
+	Report "SID: " & profile.SID
+	Report "Special: " & profile.Special
+	Report ""
+End Sub
+
+Sub Cleanup(computer)
+	Dim wmi, col, profile
+	Set wmi = GetObject("winmgmts:\\" & computer & "\root\cimv2")
+	'WQL doesn't handle NOT
+	Set col = wmi.ExecQuery("SELECT * FROM Win32_UserProfile WHERE Special=FALSE",,48)
+	For Each profile In col
+		Dim name
+		name = profile.LocalPath 'FIXME resolve SID the same way as delprof2
+		If Not included.Test(name) Then
+			Report name & ": not included"
+		ElseIf excluded.Pattern <> "" And excluded.Test(name) Then
+			Report name & ": excluded"
+		Else
+			Dump profile
+		End If
+	Next 'profile
+End Sub
+
+
+If Not Ask("Delete inactive profiles on '" & computer & "'?") Then WScript.Quit 0
+Cleanup computer
+</script>
+</job>
