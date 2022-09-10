@@ -40,7 +40,7 @@ Function CompilePattern(pattern)
 	End If
 End Function
 
-Dim list, unattended, quiet, prompt, roaming, computer, days, ini, ignore, rx
+Dim list, unattended, quiet, prompt, roaming, computer, days, ini, continue, rx
 With WScript.Arguments.Named
 	list = .Exists("l")
 	unattended = .Exists("u")
@@ -50,7 +50,7 @@ With WScript.Arguments.Named
 	computer = .Item("c")
 	If computer = "" Then computer = "."
 	days = CInt(.Item("d"))
-	ignore = .Exists("i")
+	continue = .Exists("i")
 	rx = .Exists("regex")
 End With
 
@@ -133,7 +133,7 @@ Sub Cleanup(computer)
 			If Err Then
 				last_error = Err.number
 				Report name & ": " & Err.Description
-				If Not ignore Then WScript.Quit Err.number
+				If Not continue Then WScript.Quit Err.number
 			Else
 				Report name & ": deleted"
 			End If
