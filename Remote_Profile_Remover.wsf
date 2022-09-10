@@ -9,7 +9,6 @@
 <named name="r" helpstring="Delete local caches of roaming profiles only, not local profiles" />
 <named name="c" helpstring="Delete on remote computer instead of local machine" type="string" />
 <named name="d" helpstring="Delete only profiles not used in x days" type="string" />
-<named name="ntuserini" helpstring="When determining profile age for /d, use the file NTUSER.INI instead of NTUSER.DAT for age calculation" />
 <named name="i" helpstring="Ignore errors, continue deleting" />
 <named name="ed" helpstring="Exclude profile directories whose name matches this pattern. May be used more than once and can be combined with /id" type="string" />
 <named name="id" helpstring="Include only profile directories whose name matches this pattern. May be used more than once and can be combined with /ed" type="string" />
@@ -51,7 +50,6 @@ With WScript.Arguments.Named
 	computer = .Item("c")
 	If computer = "" Then computer = "."
 	days = CInt(.Item("d"))
-	ini = .Exists("ntuserini")
 	ignore = .Exists("i")
 	rx = .Exists("regex")
 End With
@@ -96,15 +94,15 @@ Sub Report(s)
 	If Not quiet Then WScript.Echo s
 End Sub
 
-Sub Dump(profile)
-	Report "LastUseTime: " & profile.LastUseTime
-	Report "Loaded: " & profile.Loaded
-	Report "LocalPath: " & profile.LocalPath
-	Report "RoamingConfigured: " & profile.RoamingConfigured
-	Report "SID: " & profile.SID
-	Report "Special: " & profile.Special
-	Report ""
-End Sub
+Function OldEnough(profile)
+	If IsNull(profile.LastUseTime) Then
+		OldEnough = True
+	Else
+		OldEnough = profile.LastUseTime < DateAdd("d", -days, Now)
+	End If
+End Function
+
+Dim last_error
 
 Sub Cleanup(computer)
 	Dim wmi, col, profile
@@ -113,19 +111,44 @@ Sub Cleanup(computer)
 	Set col = wmi.ExecQuery("SELECT * FROM Win32_UserProfile WHERE Special=FALSE",,48)
 	For Each profile In col
 		Dim name
-		name = profile.LocalPath 'FIXME resolve SID the same way as delprof2
+		name = profile.LocalPath 'FIXME resolve profile.SID the same way as delprof2
 		If Not included.Test(name) Then
 			Report name & ": not included"
 		ElseIf excluded.Pattern <> "" And excluded.Test(name) Then
 			Report name & ": excluded"
+		ElseIf profile.Loaded Then
+			Report name & ": loaded"
+		ElseIf roaming And Not profile.RoamingConfigured Then
+			Report name & ": not roaming"
+		ElseIf Not OldEnough(profile) Then
+			Report name & ": not old enough"
+		ElseIf list Then
+			Report name & ": would be deleted without /l" 'technically wrong
+			'... but we don't want to ask useless questions
+		ElseIf Not Ask("Delete " & name & "?") Then
+			Report name & ": user refused deletion"
 		Else
-			Dump profile
+			On Error Resume Next
+			profile.Delete_
+			If Err Then
+				last_error = Err.number
+				Report name & ": " & Err.Description
+				If Not ignore Then WScript.Quit Err.number
+			Else
+				Report name & ": deleted"
+			End If
 		End If
 	Next 'profile
 End Sub
 
 
-If Not Ask("Delete inactive profiles on '" & computer & "'?") Then WScript.Quit 0
+last_error = 0
+If list Then
+	Report "Listing inactive profiles on '" & computer & "'."
+ElseIf Not Ask("Delete inactive profiles on '" & computer & "'?") Then
+	WScript.Quit 0
+End If
 Cleanup computer
+WScript.Quit last_error
 </script>
 </job>
