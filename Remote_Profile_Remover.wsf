@@ -94,11 +94,15 @@ Sub Report(s)
 	If Not quiet Then WScript.Echo s
 End Sub
 
+Function ParseDate(dt)
+	ParseDate = DateSerial(Mid(dt, 1, 4), Mid(dt, 5, 2), Mid(dt, 7, 2))
+End Function
+
 Function OldEnough(profile)
 	If IsNull(profile.LastUseTime) Then
 		OldEnough = True
 	Else
-		OldEnough = profile.LastUseTime < DateAdd("d", -days, Now)
+		OldEnough = ParseDate(profile.LastUseTime) <= DateAdd("d", -days, Date)
 	End If
 End Function
 
