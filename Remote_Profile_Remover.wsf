@@ -10,8 +10,9 @@
 <named name="c" helpstring="Delete on remote computer instead of local machine" type="string" />
 <named name="d" helpstring="Delete only profiles not used in x days" type="string" />
 <named name="i" helpstring="Ignore errors, continue deleting" />
-<named name="ed" helpstring="Exclude profile directories whose name matches this pattern. May be used more than once and can be combined with /id" type="string" />
-<named name="id" helpstring="Include only profile directories whose name matches this pattern. May be used more than once and can be combined with /ed" type="string" />
+<named name="ed" helpstring="Exclude users matching this pattern. May be used more than once and can be combined with /id" type="string" />
+<named name="id" helpstring="Include users matching this pattern. May be used more than once and can be combined with /ed" type="string" />
+<named name="match" helpstring="Match a specific piece of user information (name, caption, *dirname, path)" type="string" />
 <named name="regex" helpstring="Enable regex matching (default: glob with ? and *)" />
 </runtime>
 <script language="VBScript">
@@ -40,7 +41,9 @@ Function CompilePattern(pattern)
 	End If
 End Function
 
-Dim list, unattended, quiet, prompt, roaming, computer, days, ini, continue, rx
+Dim list, unattended, quiet, prompt, roaming, computer, days, continue, field, rx
+Dim bad
+bad = False
 With WScript.Arguments.Named
 	list = .Exists("l")
 	unattended = .Exists("u")
@@ -51,10 +54,17 @@ With WScript.Arguments.Named
 	If computer = "" Then computer = "."
 	days = CInt(.Item("d"))
 	continue = .Exists("i")
+	field = LCase(.Item("match"))
+	Select Case field
+	Case "dirname", "path", "caption", "name"
+	Case Else
+		WScript.Echo "invalid /match value"
+		bad = True
+	End Select
 	rx = .Exists("regex")
 End With
 
-If WScript.Arguments.Unnamed.Count <> 0 Or unattended And prompt Or quiet And prompt Then
+If WScript.Arguments.Unnamed.Count <> 0 Or unattended And prompt Or quiet And prompt Or bad Then
 	WScript.Arguments.ShowUsage
 	WScript.Quit 1
 End If
@@ -115,8 +125,27 @@ Sub Cleanup(computer)
 	Set col = wmi.ExecQuery("SELECT * FROM Win32_UserProfile WHERE Special=FALSE",,48)
 	For Each profile In col
 		Dim name
-		name = profile.LocalPath 'FIXME resolve profile.SID the same way as delprof2
-		If Not included.Test(name) Then
+		If field = "" Or field = "dirname" Then
+			name = Mid(profile.LocalPath, InStrRev(profile.LocalPath, "\") + 1)
+		ElseIf field = "path" Then
+			name = profile.LocalPath
+		Else
+			Dim lookup, user
+			Set lookup = wmi.ExecQuery("SELECT Caption, Name FROM Win32_UserAccount WHERE SID='" & profile.SID & "'")
+			name = ""
+			For Each user In lookup
+				Select Case field
+				Case "caption" 'domain\user
+					name = user.Caption
+				Case "name" 'user
+					name = user.Name
+				End Select
+			Next 'user
+		End If
+		If name = "" Then
+			'silently ignore it
+			'let's not generate strange log entries
+		ElseIf Not included.Test(name) Then
 			Report name & ": not included"
 		ElseIf excluded.Pattern <> "" And excluded.Test(name) Then
 			Report name & ": excluded"
