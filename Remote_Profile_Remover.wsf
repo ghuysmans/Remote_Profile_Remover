@@ -83,6 +83,10 @@ Function Ask(prompt)
 	End If
 End Function
 
+Function DoPrompt(x)
+	If prompt Then DoPrompt = Ask(x) Else DoPrompt = True
+End Function
+
 Function CompilePatterns(arg)
 	Dim prefix
 	prefix = "/" & arg & ":"
@@ -160,7 +164,7 @@ Sub Cleanup(computer)
 		ElseIf list Then
 			Report name & ": would be deleted without /l" 'technically wrong
 			'... but we don't want to ask useless questions
-		ElseIf Not Ask("Delete " & name & "?") Then
+		ElseIf Not DoPrompt("Delete " & name & "?") Then
 			Report name & ": user refused deletion"
 		Else
 			On Error Resume Next
