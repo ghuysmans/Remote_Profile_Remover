@@ -1,7 +1,7 @@
 <job>
 <runtime>
 <description>Remote profile removal tool</description>
-<example>cscript Remote_Profile_Remover.wsf /id:[0-9][0-9]$</example>
+<example>cscript Remote_Profile_Remover.wsf /id:[0-9][0-9]$ /match:name /regex</example>
 <named name="l" helpstring="List only, do not delete (what-if mode)" />
 <named name="u" helpstring="Unattended (no confirmation)" />
 <named name="q" helpstring="Quiet (no output and no confirmation)" />
