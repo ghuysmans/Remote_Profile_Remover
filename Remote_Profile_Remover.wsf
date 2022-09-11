@@ -57,6 +57,8 @@ With WScript.Arguments.Named
 	field = LCase(.Item("match"))
 	Select Case field
 	Case "dirname", "path", "caption", "name"
+	Case ""
+		field = "dirname"
 	Case Else
 		WScript.Echo "invalid /match value"
 		bad = True
@@ -125,7 +127,7 @@ Sub Cleanup(computer)
 	Set col = wmi.ExecQuery("SELECT * FROM Win32_UserProfile WHERE Special=FALSE",,48)
 	For Each profile In col
 		Dim name
-		If field = "" Or field = "dirname" Then
+		If field = "dirname" Then
 			name = Mid(profile.LocalPath, InStrRev(profile.LocalPath, "\") + 1)
 		ElseIf field = "path" Then
 			name = profile.LocalPath
