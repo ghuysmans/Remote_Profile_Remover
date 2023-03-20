@@ -62,21 +62,21 @@ If Not IsNull(arr) Then
 		path = wsh.ExpandEnvironmentStrings(path)
 		If Mid(path, 4, 6) = "Users\" Then 'FIXME?
 			If fso.FolderExists(path) Then
-				'Report  id & " -> " & path
+				Report "Present: " & id & " -> " & path
 			ElseIf list Then
-				Report "*" & id & " -> " & path
+				Report "Missing: " & id & " -> " & path
 			ElseIf Not Ask("Delete " & id & " -> " & path & "?") Then
-				Report id & ": user refused deletion"
+				Report "Aborted"
 			Else
 				On Error Resume Next
 				reg.DeleteKey HKEY_LOCAL_MACHINE, PROFILES & "\" & id
 				If Err Then
 					last_error = Err.number
-					Report name & ": " & Err.Description
+					Report "Error: " & Err.Description
 					If Not continue Then WScript.Quit Err.number
 				Else
 					deleted = deleted + 1
-					Report name & ": deleted"
+					Report "Deleted"
 				End If
 				On Error GoTo 0
 			End If
