@@ -1,0 +1,89 @@
+<job>
+<runtime>
+<description>Orphan profile removal tool</description>
+<example>cscript orphan.wsf</example>
+<named name="l" helpstring="List only, do not delete (what-if mode)" />
+<named name="u" helpstring="Unattended (no confirmation)" />
+<named name="q" helpstring="Quiet (no output and no confirmation)" />
+<named name="i" helpstring="Ignore errors, continue deleting" />
+</runtime>
+<script language="VBScript">
+Option Explicit
+
+Dim reg
+Set reg = GetObject("winmgmts://./root/default:StdRegProv")
+Const HKEY_CLASSES_ROOT   = &H80000000
+Const HKEY_CURRENT_USER   = &H80000001
+Const HKEY_LOCAL_MACHINE  = &H80000002
+Const HKEY_USERS          = &H80000003
+Const HKEY_CURRENT_CONFIG = &H80000005
+Const PROFILES = "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+
+Dim fso
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+Dim wsh
+Set wsh = CreateObject("WScript.Shell")
+
+Dim list, unattended, quiet, continue
+With WScript.Arguments.Named
+	list = .Exists("l")
+	unattended = .Exists("u")
+	quiet = .Exists("q")
+	continue = .Exists("i")
+End With
+unattended = unattended Or quiet 'Quiet (no output and no confirmation)
+
+Function Ask(prompt)
+	If unattended Then
+		Ask = True
+	Else
+		WScript.Echo prompt & " (Yes/No) "
+		Dim answer
+		answer = LCase(WScript.StdIn.ReadLine)
+		Ask = answer = "y" Or answer = "yes"
+	End If
+End Function
+
+Sub Report(s)
+	If Not quiet Then WScript.Echo s
+End Sub
+
+
+Dim deleted
+deleted = 0
+Dim arr
+reg.EnumKey HKEY_LOCAL_MACHINE, PROFILES, arr
+If Not IsNull(arr) Then
+	Dim id
+	For Each id In arr
+		Dim path
+		reg.GetStringValue HKEY_LOCAL_MACHINE, PROFILES & "\" & id, "ProfileImagePath", path
+		path = wsh.ExpandEnvironmentStrings(path)
+		If Mid(path, 4, 6) = "Users\" Then 'FIXME?
+			If fso.FolderExists(path) Then
+				'Report  id & " -> " & path
+			ElseIf list Then
+				Report "*" & id & " -> " & path
+			ElseIf Not Ask("Delete " & id & " -> " & path & "?") Then
+				Report id & ": user refused deletion"
+			Else
+				On Error Resume Next
+				reg.DeleteKey HKEY_LOCAL_MACHINE, PROFILES & "\" & id
+				If Err Then
+					last_error = Err.number
+					Report name & ": " & Err.Description
+					If Not continue Then WScript.Quit Err.number
+				Else
+					deleted = deleted + 1
+					Report name & ": deleted"
+				End If
+				On Error GoTo 0
+			End If
+		End If
+	Next
+End If
+
+WScript.Echo "Deleted " & deleted & " profile keys."
+</script>
+</job>
